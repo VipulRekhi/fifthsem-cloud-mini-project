@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cloud File Security - AES-256-GCM & AWS S3 Integration</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="app-header">
+            <div class="header-badges">
+                <span class="header-badge">Phase 1: Local Chunking & AES-256-GCM</span>
+                <span class="header-badge s3-badge">Phase 2: AWS S3 Cloud Storage</span>
+                <a href="/portfolio/" target="_blank" class="header-badge portfolio-badge" style="text-decoration: none; cursor: pointer; color: #a78bfa; border-color: rgba(167, 139, 250, 0.4); background: rgba(167, 139, 250, 0.15);">Phase 3: Portfolio & Docs ↗</a>
+            </div>
+            <h1>Cloud File Security & Storage System</h1>
+            <p class="subtitle">Secure client-side 1 MB block encryption, private AWS S3 block synchronization, and cryptographic SHA-256 integrity verification.</p>
+            
+            <!-- Global S3 Status Banner -->
+            <div class="s3-conn-banner" id="s3ConnBanner">
+                <span class="conn-pulse"></span>
+                <span id="s3ConnStatus">Checking AWS S3 connection (cloud-mini-project-vipul-2026 • ap-south-1)...</span>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Step 1: Upload & Encrypt -->
+            <section class="card upload-card" id="uploadSection">
+                <div class="section-title">
+                    <span class="step-num">1</span>
+                    <h2>Select & Encrypt File</h2>
+                </div>
+
+                <div class="dropzone" id="dropzone">
+                    <input type="file" id="fileInput" class="file-input">
+                    <div class="dropzone-content">
+                        <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                            <polyline points="17 8 12 3 7 8"/>
+                            <line x1="12" y1="3" x2="12" y2="15"/>
+                        </svg>
+                        <p class="dropzone-text"><strong>Click to browse</strong> or drag & drop any file here</p>
+                        <p class="dropzone-hint">File will be split into 1 MB blocks and encrypted with AES-256-GCM</p>
+                    </div>
+                </div>
+
+                <div class="selected-file-preview" id="selectedFilePreview" style="display: none;">
+                    <div class="file-info-badge">
+                        <span class="file-name" id="previewFileName">filename.ext</span>
+                        <span class="file-size" id="previewFileSize">0 KB</span>
+                    </div>
+                    <button class="btn btn-primary" id="btnEncrypt">
+                        <span>Process, Chunk & Encrypt</span>
+                    </button>
+                </div>
+            </section>
+
+            <!-- Loading Spinner -->
+            <div class="spinner-container" id="loadingSpinner" style="display: none;">
+                <div class="spinner"></div>
+                <p id="spinnerText">Processing blocks and encrypting...</p>
+            </div>
+
+            <!-- Error Banner -->
+            <div class="alert alert-error" id="errorBanner" style="display: none;">
+                <span class="alert-icon">⚠️</span>
+                <span id="errorMessage">An error occurred.</span>
+            </div>
+
+            <!-- Step 2: Encryption Results -->
+            <section class="card results-card" id="resultsSection" style="display: none;">
+                <div class="section-title">
+                    <span class="step-num">2</span>
+                    <h2>Encryption & Chunking Details</h2>
+                </div>
+
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <span class="stat-label">Original Filename</span>
+                        <span class="stat-value" id="displayFilename">-</span>
+                    </div>
+                    <div class="stat-card">
+                        <span class="stat-label">Original File Size</span>
+                        <span class="stat-value" id="displayFilesize">-</span>
+                    </div>
+                    <div class="stat-card">
+                        <span class="stat-label">Block Size</span>
+                        <span class="stat-value" id="displayBlockSize">1 MB (1,048,576 B)</span>
+                    </div>
+                    <div class="stat-card">
+                        <span class="stat-label">Total Blocks</span>
+                        <span class="stat-value highlight" id="displayTotalBlocks">-</span>
+                    </div>
+                    <div class="stat-card full-width">
+                        <span class="stat-label">Encryption Status</span>
+                        <div class="status-pill success" id="displayStatus">
+                            <span class="status-dot"></span>
+                            <span id="displayStatusText">Encrypted (AES-256-GCM)</span>
+                        </div>
+                    </div>
+                    <div class="stat-card full-width hash-card">
+                        <span class="stat-label">Original SHA-256 Checksum</span>
+                        <div class="hash-display">
+                            <code id="displayOriginalHash">-</code>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Stored Blocks Details -->
+                <div class="blocks-summary">
+                    <div class="blocks-summary-header">
+                        <h3>Encrypted Blocks Stored Locally</h3>
+                        <span class="badge" id="blocksCountBadge">0 Blocks</span>
+                    </div>
+                    <div class="blocks-list" id="blocksList"></div>
+                </div>
+
+                <!-- Phase 1 Local Decrypt Option -->
+                <div class="action-bar local-action-bar">
+                    <button class="btn btn-outline" id="btnDecrypt">
+                        <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                            <path d="M7 11V7a5 5 0 0 1 9.9-1"></path>
+                        </svg>
+                        <span>Local Decrypt & Reconstruct (Phase 1)</span>
+                    </button>
+                </div>
+            </section>
+
+            <!-- Step 3: Phase 2 AWS S3 Integration Section -->
+            <section class="card s3-card" id="s3Section" style="display: none;">
+                <div class="section-title">
+                    <span class="step-num s3-step-num">3</span>
+                    <h2>AWS S3 Cloud Storage Integration (Phase 2)</h2>
+                </div>
+
+                <p class="s3-desc">
+                    Synchronize encrypted 1 MB blocks directly with AWS S3 (<code class="inline-code">s3://cloud-mini-project-vipul-2026/encrypted-files/&lt;file-id&gt;/</code>).
+                    The raw unencrypted file is never uploaded.
+                </p>
+
+                <!-- Actions Container -->
+                <div class="s3-actions-grid">
+                    <!-- S3 Upload Column -->
+                    <div class="s3-action-box">
+                        <h3>1. Cloud Upload</h3>
+                        <p class="box-desc">Upload encrypted blocks to private S3 bucket preserving block order.</p>
+                        <button class="btn btn-aws" id="btnS3Upload">
+                            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/>
+                                <polyline points="12 12 12 7 9 10"/>
+                                <polyline points="12 7 15 10"/>
+                            </svg>
+                            <span>Upload Encrypted Blocks to S3</span>
+                        </button>
+                    </div>
+
+                    <!-- S3 Download Column -->
+                    <div class="s3-action-box">
+                        <h3>2. Cloud Download & Verification</h3>
+                        <p class="box-desc">Download encrypted blocks from S3 to <code class="inline-code">downloaded_blocks/</code>, decrypt, and verify SHA-256.</p>
+                        <button class="btn btn-aws-secondary" id="btnS3Download" disabled>
+                            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/>
+                                <polyline points="12 12 12 17 9 14"/>
+                                <polyline points="12 17 15 14"/>
+                            </svg>
+                            <span>Download Encrypted Blocks from S3</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Live Status Activity Feed -->
+                <div class="status-feed-box" id="s3StatusFeedBox" style="display: none;">
+                    <div class="feed-header">
+                        <h4>Live S3 Activity & Status Messages</h4>
+                        <span class="status-badge" id="s3CurrentStatusBadge">Idle</span>
+                    </div>
+                    <div class="status-feed-list" id="s3StatusFeedList"></div>
+                </div>
+
+                <!-- S3 Object Listing & Status Section -->
+                <div class="s3-details-panel" id="s3DetailsPanel" style="display: none;">
+                    <div class="s3-details-header">
+                        <h3>S3 Object Status & Path Information</h3>
+                    </div>
+
+                    <div class="stats-grid s3-stats-grid">
+                        <div class="stat-card">
+                            <span class="stat-label">S3 Bucket & Region</span>
+                            <span class="stat-value" id="s3BucketInfo">cloud-mini-project-vipul-2026 (ap-south-1)</span>
+                        </div>
+                        <div class="stat-card">
+                            <span class="stat-label">S3 Target Prefix</span>
+                            <span class="stat-value s3-prefix-text" id="s3PrefixDisplay">-</span>
+                        </div>
+                        <div class="stat-card">
+                            <span class="stat-label">Blocks Uploaded</span>
+                            <span class="stat-value highlight" id="s3UploadedCount">0</span>
+                        </div>
+                        <div class="stat-card">
+                            <span class="stat-label">Blocks Downloaded</span>
+                            <span class="stat-value highlight" id="s3DownloadedCount">0</span>
+                        </div>
+                        <div class="stat-card">
+                            <span class="stat-label">Upload Status</span>
+                            <div class="status-pill" id="s3UploadStatusPill">
+                                <span class="status-dot"></span>
+                                <span id="s3UploadStatusText">Not Started</span>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <span class="stat-label">Download Status</span>
+                            <div class="status-pill" id="s3DownloadStatusPill">
+                                <span class="status-dot"></span>
+                                <span id="s3DownloadStatusText">Not Started</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Uploaded S3 Objects List -->
+                    <div class="s3-objects-box" id="s3ObjectsBox" style="display: none;">
+                        <h4>Uploaded S3 Object Paths</h4>
+                        <div class="s3-objects-list" id="s3ObjectsList"></div>
+                    </div>
+                </div>
+
+                <!-- S3 Decryption & SHA-256 Verification Result -->
+                <div class="s3-verification-box" id="s3VerificationBox" style="display: none;">
+                    <!-- Match Banner -->
+                    <div class="verification-badge" id="s3MatchBadge">
+                        <div class="verification-icon" id="s3MatchIcon">✓</div>
+                        <div class="verification-text">
+                            <h3 id="s3MatchTitle">SHA-256 MATCH ✓</h3>
+                            <p id="s3MatchSubtitle">Data integrity 100% verified against S3 cloud storage.</p>
+                        </div>
+                    </div>
+
+                    <!-- Hashes Comparison Box -->
+                    <div class="hashes-comparison">
+                        <div class="hash-box">
+                            <span class="hash-label">Original File SHA-256</span>
+                            <code id="s3VerifyOriginalHash">-</code>
+                        </div>
+                        <div class="hash-box">
+                            <span class="hash-label">Reconstructed File SHA-256 (from S3 Downloaded Blocks)</span>
+                            <code id="s3VerifyReconstructedHash">-</code>
+                        </div>
+                    </div>
+
+                    <div class="verification-actions">
+                        <a class="btn btn-secondary" id="btnS3DownloadFile" href="#" download>
+                            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                <polyline points="7 10 12 15 17 10"></polyline>
+                                <line x1="12" y1="15" x2="12" y2="3"></line>
+                            </svg>
+                            <span>Download Reconstructed File</span>
+                        </a>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Step 4: Local Decryption & Integrity Verification (Phase 1 preserved) -->
+            <section class="card verification-card" id="verificationSection" style="display: none;">
+                <div class="section-title">
+                    <span class="step-num">4</span>
+                    <h2>Local SHA-256 Integrity Verification (Phase 1)</h2>
+                </div>
+
+                <!-- Match Banner -->
+                <div class="verification-badge" id="matchBadge">
+                    <div class="verification-icon" id="matchIcon">✓</div>
+                    <div class="verification-text">
+                        <h3 id="matchTitle">SHA-256 HASHES MATCH!</h3>
+                        <p id="matchSubtitle">Data integrity 100% verified locally.</p>
+                    </div>
+                </div>
+
+                <!-- Hashes Comparison Box -->
+                <div class="hashes-comparison">
+                    <div class="hash-box">
+                        <span class="hash-label">Original File SHA-256</span>
+                        <code id="verifyOriginalHash">-</code>
+                    </div>
+                    <div class="hash-box">
+                        <span class="hash-label">Reconstructed File SHA-256</span>
+                        <code id="verifyReconstructedHash">-</code>
+                    </div>
+                </div>
+
+                <div class="verification-actions">
+                    <a class="btn btn-secondary" id="btnDownload" href="#" download>
+                        <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                            <polyline points="7 10 12 15 17 10"></polyline>
+                            <line x1="12" y1="15" x2="12" y2="3"></line>
+                        </svg>
+                        <span>Download Reconstructed File</span>
+                    </a>
+                </div>
+            </section>
+
+            <!-- Reset Button Bar -->
+            <div class="reset-bar" id="resetBar" style="display: none;">
+                <button class="btn btn-ghost" id="btnReset">Process Another File</button>
+            </div>
+        </main>
+
+        <footer class="app-footer">
+            <p>Cloud Storage Mini-Project • AES-256-GCM + AWS S3 + SHA-256 Verification</p>
+        </footer>
+    </div>
+
+    <script src="/static/js/main.js"></script>
+</body>
+</html>

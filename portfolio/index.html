@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cloud File Security & Storage System</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- 1. Header -->
+    <header class="site-header">
+        <div class="header-container">
+            <span class="project-title">Cloud File Security & Storage System</span>
+        </div>
+    </header>
+
+    <!-- Main Content Container -->
+    <main class="main-content">
+        <!-- 2. Main Section -->
+        <section class="intro-section">
+            <h1 class="main-heading">Cloud File Security & Storage System</h1>
+            <p class="project-description">
+                Secure file storage using 1 MB block segmentation, AES-256-GCM encryption, AWS S3, and SHA-256 integrity verification.
+            </p>
+
+            <div class="cta-wrapper">
+                <a id="btnTestApp" href="/" class="btn-primary">Test the Application</a>
+                <div id="backendNotice" class="backend-notice" style="display: none;">
+                    <p><strong>Notice:</strong> The file processing backend must be run locally to test file segmentation, AES-256-GCM encryption, AWS S3 upload, and SHA-256 reconstruction. Start the Flask server with <code>python app.py</code> and open <a href="http://127.0.0.1:5000" target="_blank" rel="noopener noreferrer">http://127.0.0.1:5000</a>.</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- 3. Procedure Section -->
+        <section class="content-section">
+            <h2 class="section-title">How It Works</h2>
+            <ol class="procedure-list">
+                <li>Select a file.</li>
+                <li>Split the file into 1 MB blocks.</li>
+                <li>Encrypt each block using AES-256-GCM.</li>
+                <li>Upload encrypted blocks to a private AWS S3 bucket.</li>
+                <li>Download the encrypted blocks.</li>
+                <li>Decrypt and reconstruct the original file.</li>
+                <li>Verify file integrity using SHA-256.</li>
+            </ol>
+        </section>
+
+        <!-- 4. Technologies Section -->
+        <section class="content-section">
+            <h2 class="section-title">Technologies Used</h2>
+            <ul class="tech-list">
+                <li>Python</li>
+                <li>Flask</li>
+                <li>AES-256-GCM</li>
+                <li>SHA-256</li>
+                <li>AWS S3</li>
+                <li>Cloudflare Pages (portfolio hosting)</li>
+            </ul>
+        </section>
+    </main>
+
+    <!-- 5. Footer -->
+    <footer class="site-footer">
+        <p>Cloud Computing Mini-Project | 2026</p>
+    </footer>
+
+    <script src="script.js"></script>
+</body>
+</html>

@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+ENV/
+
+# Environment variables
+.env
+*.env
+
+# Local Storage
+storage/encrypted_blocks/
+storage/reconstructed/
+storage/metadata/
+storage/keys/
+storage/*.key
+storage/downloaded_blocks/
+downloaded_blocks/
+
+# OS
+.DS_Store
+Thumbs.db
