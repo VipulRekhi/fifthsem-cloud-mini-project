@@ -172,6 +172,64 @@ def upload_all_blocks_to_s3(file_id: str) -> dict:
     }
 
 
+def recover_metadata_from_s3(file_id: str) -> dict:
+    """
+    Attempt to recover metadata.json for file_id from S3 if local metadata is missing.
+    Saves it locally to crypto_utils.METADATA_DIR for subsequent operations.
+    """
+    if not crypto_utils.validate_file_id(file_id):
+        raise ValueError(f"Invalid file_id format: '{file_id}'")
+
+    crypto_utils.init_storage()
+    local_meta_path = crypto_utils.METADATA_DIR / f"{file_id}.json"
+    if local_meta_path.exists():
+        with open(local_meta_path, "r", encoding="utf-8") as mf:
+            return json.load(mf)
+
+    s3_key = f"encrypted-files/{file_id}/metadata.json"
+    s3 = get_s3_client()
+    try:
+        response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=s3_key)
+        data = json.loads(response["Body"].read().decode("utf-8"))
+        with open(local_meta_path, "w", encoding="utf-8") as mf:
+            json.dump(data, mf, indent=2)
+        return data
+    except Exception as e:
+        raise FileNotFoundError(
+            f"Metadata for file ID '{file_id}' not found locally or in S3 ({str(e)})."
+        )
+
+
+def get_metadata_with_s3_fallback(file_id: str) -> dict:
+    """Retrieve metadata from local disk, or recover from S3 if missing."""
+    try:
+        return crypto_utils.get_file_metadata(file_id)
+    except FileNotFoundError:
+        return recover_metadata_from_s3(file_id)
+
+
+def cleanup_downloaded_blocks(file_id: str) -> int:
+    """Safely remove locally downloaded encrypted blocks for a given file_id."""
+    if not crypto_utils.validate_file_id(file_id):
+        raise ValueError(f"Invalid file_id format: '{file_id}'")
+
+    file_download_dir = DOWNLOADED_BLOCKS_DIR / file_id
+    deleted = 0
+    if file_download_dir.exists():
+        for f in file_download_dir.iterdir():
+            if f.is_file():
+                try:
+                    f.unlink()
+                    deleted += 1
+                except OSError:
+                    pass
+        try:
+            file_download_dir.rmdir()
+        except OSError:
+            pass
+    return deleted
+
+
 def download_and_verify_from_s3(file_id: str) -> dict:
     """
     1. Downloads all encrypted blocks for file_id from S3 into downloaded_blocks/<file_id>/
@@ -181,7 +239,7 @@ def download_and_verify_from_s3(file_id: str) -> dict:
     5. Compares with original file's SHA-256
     """
     init_s3_storage()
-    metadata = crypto_utils.get_file_metadata(file_id)
+    metadata = get_metadata_with_s3_fallback(file_id)
     total_expected_blocks = metadata["total_blocks"]
 
     # Local target directory for downloaded encrypted blocks

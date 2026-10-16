@@ -26,16 +26,41 @@ def init_storage():
 
 
 def get_or_create_key() -> bytes:
-    """Retrieve existing 256-bit AES key or generate a new one."""
+    """
+    Retrieve existing 256-bit AES key:
+    1. Check ENCRYPTION_MASTER_KEY_HEX environment variable (primary for production).
+    2. Fall back to local KEY_FILE if present (for local development continuity).
+    3. Generate and persist a new key only if neither is available.
+    Never logs or exposes key material.
+    """
     init_storage()
+
+    # 1. Check production environment variable
+    env_key_hex = os.getenv("ENCRYPTION_MASTER_KEY_HEX")
+    if env_key_hex and env_key_hex.strip():
+        cleaned_hex = env_key_hex.strip()
+        try:
+            key = bytes.fromhex(cleaned_hex)
+            if len(key) != 32:
+                raise ValueError(
+                    f"ENCRYPTION_MASTER_KEY_HEX must decode to 32 bytes (256 bits). Got {len(key)} bytes."
+                )
+            return key
+        except ValueError as e:
+            raise ValueError(f"Invalid ENCRYPTION_MASTER_KEY_HEX format: {e}")
+
+    # 2. Check local key file
     if KEY_FILE.exists():
         with open(KEY_FILE, "rb") as f:
-            return f.read()
-    else:
-        key = AESGCM.generate_key(bit_length=256)
-        with open(KEY_FILE, "wb") as f:
-            f.write(key)
-        return key
+            key = f.read()
+            if len(key) == 32:
+                return key
+
+    # 3. Generate new key if neither is found
+    key = AESGCM.generate_key(bit_length=256)
+    with open(KEY_FILE, "wb") as f:
+        f.write(key)
+    return key
 
 
 def compute_file_sha256(filepath: Path) -> str:
@@ -179,10 +204,77 @@ def decrypt_and_reconstruct_file(file_id: str) -> dict:
     }
 
 
+def validate_file_id(file_id: str) -> bool:
+    """Validate that file_id contains only alphanumeric chars, hyphens, or underscores."""
+    import re
+    return bool(file_id and re.fullmatch(r"^[a-zA-Z0-9_-]{4,32}$", file_id))
+
+
 def get_file_metadata(file_id: str) -> dict:
-    """Load metadata by file ID."""
+    """Load metadata by file ID with path sanitization."""
+    if not validate_file_id(file_id):
+        raise ValueError(f"Invalid file_id format: '{file_id}'")
     metadata_path = METADATA_DIR / f"{file_id}.json"
     if not metadata_path.exists():
-        raise FileNotFoundError("Metadata not found")
+        raise FileNotFoundError(f"Metadata for file ID '{file_id}' not found.")
     with open(metadata_path, "r", encoding="utf-8") as mf:
         return json.load(mf)
+
+
+def cleanup_local_file_data(file_id: str) -> dict:
+    """
+    Safely purges locally stored temporary encrypted blocks and reconstructed files
+    associated with a specific file_id.
+    """
+    if not validate_file_id(file_id):
+        raise ValueError(f"Invalid file_id format: '{file_id}'")
+
+    deleted_blocks = 0
+    deleted_reconstructed = 0
+
+    # Clean local encrypted blocks
+    if BLOCKS_DIR.exists():
+        for block_file in BLOCKS_DIR.glob(f"{file_id}_block_*.enc"):
+            try:
+                block_file.unlink()
+                deleted_blocks += 1
+            except OSError:
+                pass
+
+    # Clean local reconstructed files
+    if RECONSTRUCTED_DIR.exists():
+        for rec_file in RECONSTRUCTED_DIR.glob(f"{file_id}_*"):
+            try:
+                rec_file.unlink()
+                deleted_reconstructed += 1
+            except OSError:
+                pass
+
+    return {
+        "status": "success",
+        "file_id": file_id,
+        "deleted_blocks": deleted_blocks,
+        "deleted_reconstructed": deleted_reconstructed
+    }
+
+
+def cleanup_expired_files(max_age_seconds: int = 3600) -> int:
+    """
+    Removes temporary reconstructed files older than max_age_seconds
+    to prevent ephemeral disk exhaustion on hosting services.
+    """
+    import time
+    now = time.time()
+    cleaned = 0
+
+    if RECONSTRUCTED_DIR.exists():
+        for item in RECONSTRUCTED_DIR.iterdir():
+            if item.is_file():
+                try:
+                    if (now - item.stat().st_mtime) > max_age_seconds:
+                        item.unlink()
+                        cleaned += 1
+                except OSError:
+                    pass
+
+    return cleaned

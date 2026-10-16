@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: cloud-file-security-backend
+    env: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --threads 4 --timeout 120
+    healthCheckPath: /healthz
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.10
+      - key: AWS_REGION
+        value: ap-south-1
+      - key: S3_BUCKET_NAME
+        value: cloud-mini-project-vipul-2026
+      - key: CORS_ORIGINS
+        value: https://quiet-night-ad88.vipulrekhi.workers.dev,http://127.0.0.1:5000,http://localhost:5000
+      - key: AWS_ACCESS_KEY_ID
+        sync: false
+      - key: AWS_SECRET_ACCESS_KEY
+        sync: false
+      - key: ENCRYPTION_MASTER_KEY_HEX
+        sync: false

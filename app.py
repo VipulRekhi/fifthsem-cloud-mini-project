@@ -1,15 +1,47 @@
+import os
+from pathlib import Path
 from flask import Flask, render_template, request, jsonify, send_file, send_from_directory
 from werkzeug.utils import secure_filename
-from pathlib import Path
+from dotenv import load_dotenv
+from flask_cors import CORS
 import crypto_utils
 import s3_utils
+
+# Load environment variables from .env if present
+load_dotenv()
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 500 * 1024 * 1024  # 500 MB limit
 
+# CORS Configuration: allow Cloudflare Pages portfolio and local dev by default
+DEFAULT_ORIGINS = [
+    "https://quiet-night-ad88.vipulrekhi.workers.dev",
+    "http://127.0.0.1:5000",
+    "http://localhost:5000",
+]
+env_cors = os.getenv("CORS_ORIGINS", "")
+if env_cors.strip():
+    allowed_origins = [orig.strip() for orig in env_cors.split(",") if orig.strip()]
+else:
+    allowed_origins = DEFAULT_ORIGINS
+
+CORS(app, resources={r"/api/*": {"origins": allowed_origins}}, supports_credentials=True)
+
 # Initialize storage and S3 download folders
 crypto_utils.init_storage()
 s3_utils.init_s3_storage()
+
+
+@app.route("/healthz", methods=["GET"])
+def health_check():
+    """Health check endpoint for Render deployment monitoring."""
+    return jsonify({
+        "status": "healthy",
+        "service": "cloud-file-security-storage",
+        "version": "1.0.0",
+        "s3_bucket": s3_utils.S3_BUCKET_NAME,
+        "aws_region": s3_utils.AWS_REGION
+    }), 200
 
 
 @app.route("/")
@@ -81,7 +113,7 @@ def decrypt_and_reconstruct_local(file_id: str):
 def download_reconstructed(file_id: str):
     """Allows downloading the reconstructed file (local or S3 source)."""
     try:
-        metadata = crypto_utils.get_file_metadata(file_id)
+        metadata = s3_utils.get_metadata_with_s3_fallback(file_id)
         source = request.args.get("source", "local")
 
         if source == "s3":
@@ -162,6 +194,25 @@ def s3_download_and_verify(file_id: str):
         return jsonify(err_dict), 500
 
 
+@app.route("/api/cleanup/<file_id>", methods=["POST", "DELETE"])
+def cleanup_file(file_id: str):
+    """Purge locally cached blocks and reconstructed files for a given file ID."""
+    try:
+        res_local = crypto_utils.cleanup_local_file_data(file_id)
+        res_downloaded = s3_utils.cleanup_downloaded_blocks(file_id)
+        return jsonify({
+            "status": "success",
+            "file_id": file_id,
+            "deleted_local_blocks": res_local["deleted_blocks"],
+            "deleted_reconstructed": res_local["deleted_reconstructed"],
+            "deleted_downloaded_blocks": res_downloaded
+        })
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        return jsonify({"error": f"Cleanup failed: {str(e)}"}), 500
+
+
 # =====================================================================
 # Phase 3: Portfolio Website Route
 # =====================================================================
@@ -194,4 +245,6 @@ def portfolio_script_fallback():
 
 
 if __name__ == "__main__":
-    app.run(host="127.0.0.1", port=5000, debug=True)
+    port = int(os.getenv("PORT", 5000))
+    debug_mode = os.getenv("FLASK_DEBUG", "false").lower() in ("true", "1", "t")
+    app.run(host="0.0.0.0", port=port, debug=debug_mode)
